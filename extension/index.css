@@ -1,0 +1,91 @@
+.root.collapsed {
+  height: 50px;
+}
+
+.root {
+  position: absolute;
+  top: 50px;
+  left: 20px;
+  width: 300px;
+  border: 4px double white;
+}
+
+.friends {
+  width: 100%;
+  height: 200px;
+  border-bottom: 2px solid white;
+  color: lightblue;
+}
+
+.friends h3 {
+  text-align: center;
+}
+
+.friend {
+  padding: 6px;
+}
+
+.friend.online {
+  font-weight: bold;
+}
+
+.friend.offline {
+  font-style: italic;
+}
+
+.share {
+  cursor: pointer;
+  text-align: center;
+  padding: 5px;
+  font-size: 18px;
+  color: red;
+  border-bottom: 2px solid white;
+}
+
+.messages {
+  width: 100%;
+  height: 300px;
+  overflow-Y: scroll;
+  color: green;
+}
+
+.message {
+  position: relative;
+  padding: 0px 5px 5px 5px;
+}
+
+.message.slash {
+  color: darkgreen;
+  font-style: italic;
+}
+
+.message--timestamp {
+  position: absolute;
+  top: 0;
+  left: 0:
+  z-index: 5;
+  font-size: 50%;
+  transform: translateY(-100%);
+  display: none;
+  background-color: white;
+  color: gray;
+}
+
+.message:hover {
+  background-color: white;
+}
+
+.message:hover .message--timestamp {
+  display: block;
+}
+
+.chatbar {
+  width: 100%;
+}
+
+.chatbar input[type="text"] {
+  width: 80%;
+}
+.chatbar input[type="submit"] {
+  width: 20%;
+}

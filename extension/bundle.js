@@ -59743,6 +59743,8 @@ if (process.env.NODE_ENV === 'production') {
 },{"./cjs/react.development.js":263,"./cjs/react.production.min.js":264,"_process":267}],266:[function(require,module,exports){
 'use strict';
 
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
@@ -59763,6 +59765,12 @@ firebase.initializeApp({
 
 var db = firebase.firestore();
 
+// a simple wrapper around setInterval that loops immediately
+var setIntervalNow = function setIntervalNow(cbk, delay) {
+  cbk();
+  setInterval(cbk, delay);
+};
+
 // interfacing with firebase firestore
 
 var Client = function () {
@@ -59775,15 +59783,77 @@ var Client = function () {
   _createClass(Client, [{
     key: 'message',
     value: function message(msg) {
-      console.log('message', msg);
       db.collection("messages").add({
         user: this.user,
         message: msg,
         timestamp: Date.now()
-      }).then(function (docRef) {
-        console.log("Document written with ID: ", docRef.id);
-      }).catch(function (error) {
-        console.error("Error adding document: ", error);
+      });
+    }
+  }, {
+    key: 'shareView',
+    value: function shareView(view) {
+      db.collection('views').doc(this.user).set({
+        view: JSON.stringify(view)
+      });
+    }
+  }, {
+    key: 'onViews',
+    value: function onViews(cbk) {
+      db.collection('views').onSnapshot(function (_views) {
+        if (_views && _views.docs) {
+          var views = _views.docs.map(function (_doc) {
+            return _doc.data();
+          });
+          cbk(views.map(function (view) {
+            return JSON.parse(view.view);
+          }));
+        }
+      });
+    }
+  }, {
+    key: 'beOnline',
+    value: function beOnline() {
+      var _this = this;
+
+      setIntervalNow(function () {
+        db.collection('users').doc(_this.user).set({
+          name: _this.user,
+          lastActive: Date.now()
+        }, { merge: true });
+      }, 5000);
+    }
+  }, {
+    key: 'onMessages',
+    value: function onMessages(cbk) {
+      db.collection('messages').orderBy('timestamp').onSnapshot(function (_messages) {
+        if (_messages && _messages.docs) {
+          var messages = _messages.docs.map(function (_doc) {
+            return _doc.data();
+          });
+          cbk(messages);
+        }
+      });
+    }
+  }, {
+    key: 'onFriends',
+    value: function onFriends(cbk) {
+      db.collection('users').orderBy('lastActive').onSnapshot(function (_users) {
+        if (_users && _users.docs) {
+          var users = _users.docs.map(function (_doc) {
+            return _doc.data();
+          }).map(function (user) {
+            return _extends({}, user, {
+              online: user.lastActive > Date.now() - 10000
+            });
+          }).sort(function (user1, user2) {
+            if (user1.online === user2.online) {
+              return user1.name < user2.name ? -1 : 1;
+            } else {
+              return user1.online ? -1 : 1;
+            }
+          });
+          cbk(users);
+        }
       });
     }
   }]);
@@ -59804,10 +59874,49 @@ var Bridge = function () {
     value: function getName() {
       return localStorage.getItem('GIO_CACHED_USERNAME');
     }
+  }, {
+    key: 'getView',
+    value: function getView() {
+      var gridEl = document.querySelector('#map tbody');
+      var grid = Array.from(gridEl.children).map(function (tr) {
+        return Array.from(tr.children).map(function (td) {
+          return {
+            className: td.className,
+            textContent: td.textContent
+          };
+        });
+      });
+      return grid;
+    }
+  }, {
+    key: 'paintView',
+    value: function paintView(view) {
+      var gridEl = document.querySelector('#map tbody');
+      var grid = Array.from(gridEl.children).forEach(function (tr, i) {
+        return Array.from(tr.children).forEach(function (td, j) {
+          var data = view[i][j];
+          if (data.className.indexOf('fog') === -1 && td.className.indexOf('fog') !== -1) {
+            data.className.split(' ').forEach(function (cls) {
+              if (cls !== '' && cls !== 'selected' && cls !== 'attackable') {
+                td.classList.add(cls);
+              }
+            });
+            td.innerHTML = data.textContent;
+          }
+        });
+      });
+    }
+  }, {
+    key: 'inGame',
+    value: function inGame() {
+      return document.querySelector('#map tbody') !== null;
+    }
   }]);
 
   return Bridge;
 }();
+
+window.bridge = new Bridge();
 
 // interfacing with the user
 
@@ -59817,46 +59926,162 @@ var TeamGenerals = function (_React$Component) {
   function TeamGenerals() {
     _classCallCheck(this, TeamGenerals);
 
-    var _this = _possibleConstructorReturn(this, (TeamGenerals.__proto__ || Object.getPrototypeOf(TeamGenerals)).call(this));
+    var _this2 = _possibleConstructorReturn(this, (TeamGenerals.__proto__ || Object.getPrototypeOf(TeamGenerals)).call(this));
 
-    _this.state = {
-      value: ''
+    _this2.state = {
+      messages: [],
+      friends: [],
+      value: '',
+      sharing: false
     };
-    return _this;
+    return _this2;
   }
 
   _createClass(TeamGenerals, [{
     key: 'componentDidMount',
     value: function componentDidMount() {
+      var _this3 = this;
+
       this.bridge = new Bridge();
       var user = this.bridge.getName();
       this.client = new Client(user);
       this.client.message('/joined the room');
+      this.client.beOnline();
+      this.client.onMessages(function (messages) {
+        _this3.setState({ messages: messages });
+      });
+      this.client.onFriends(function (friends) {
+        _this3.setState({ friends: friends });
+      });
+    }
+  }, {
+    key: 'onShare',
+    value: function onShare() {
+      var _this4 = this;
+
+      if (!this.bridge.inGame()) return;
+      setIntervalNow(function () {
+        var view = _this4.bridge.getView();
+        console.log('shareView', view);
+        _this4.client.shareView(view);
+      }, 1000);
+      this.client.onViews(function (views) {
+        console.log('onViews', views);
+        views.forEach(function (view) {
+          _this4.bridge.paintView(view);
+        });
+      });
+      this.setState({
+        sharing: true
+      });
     }
   }, {
     key: 'render',
     value: function render() {
-      var _this2 = this;
+      var _this5 = this;
+
+      var Message = function Message(_ref) {
+        var user = _ref.user,
+            message = _ref.message,
+            timestamp = _ref.timestamp;
+
+        var slashMessage = message.startsWith('/');
+
+        return React.createElement(
+          'div',
+          { className: 'message ' + (slashMessage ? 'slash' : '') },
+          React.createElement(
+            'span',
+            { className: 'message--timestamp' },
+            new Date(timestamp).toString()
+          ),
+          React.createElement(
+            'span',
+            { className: 'message--user' },
+            user
+          ),
+          slashMessage ? ' ' : ': ',
+          React.createElement(
+            'span',
+            { className: 'message--message' },
+            slashMessage ? message.substring(1) : message
+          )
+        );
+      };
+
+      var Friend = function Friend(_ref2) {
+        var name = _ref2.name,
+            online = _ref2.online,
+            sharing = _ref2.sharing;
+
+        return React.createElement(
+          'div',
+          { className: 'friend ' + (online ? 'online' : 'offline') },
+          name,
+          sharing && React.createElement('span', { className: 'friend sharing' })
+        );
+      };
+
+      var Share = function Share(_ref3) {
+        var sharing = _ref3.sharing,
+            onShare = _ref3.onShare;
+
+        return React.createElement(
+          'div',
+          {
+            className: 'share ' + (sharing ? 'sharing' : ''),
+            onClick: onShare
+          },
+          sharing ? 'Sharing' : 'Not Sharing'
+        );
+      };
 
       return React.createElement(
         'div',
         { className: 'root' },
-        'Hello World',
+        React.createElement(
+          'div',
+          { className: 'friends' },
+          React.createElement(
+            'h3',
+            null,
+            'Your friends'
+          ),
+          this.state.friends.map(function (props, i) {
+            return React.createElement(Friend, _extends({ key: i }, props));
+          })
+        ),
+        React.createElement(Share, {
+          sharing: this.state.sharing,
+          onShare: function onShare() {
+            _this5.onShare();
+          }
+        }),
+        React.createElement(
+          'div',
+          { className: 'messages' },
+          this.state.messages.map(function (props, i) {
+            return React.createElement(Message, _extends({ key: i }, props));
+          })
+        ),
         React.createElement(
           'form',
-          { onSubmit: function onSubmit() {
-              var msg = _this2.state.value;
-              _this2.client.message(msg);
+          {
+            className: 'chatbar',
+            onSubmit: function onSubmit(e) {
+              e.preventDefault();
+              var msg = _this5.state.value;
+              _this5.client.message(msg);
+              _this5.setState({ value: '' });
             } },
-          React.createElement(
-            'label',
-            null,
-            'Chat:',
-            React.createElement('input', { type: 'text', value: this.state.value, onChange: function onChange(event) {
-                _this2.setState({ value: event.target.value });
-              } })
-          ),
-          React.createElement('input', { type: 'submit', value: 'Submit' })
+          React.createElement('input', {
+            type: 'text', value: this.state.value, onChange: function onChange(event) {
+              _this5.setState({ value: event.target.value });
+            }
+          }),
+          React.createElement('input', {
+            type: 'submit', value: 'Chat'
+          })
         )
       );
     }
@@ -59866,7 +60091,6 @@ var TeamGenerals = function (_React$Component) {
 }(React.Component);
 
 var node = document.createElement('div');
-node.setAttribute("style", "position:absolute;left:20px;top:20px");
 document.body.appendChild(node);
 ReactDOM.render(React.createElement(TeamGenerals, null), node);
 

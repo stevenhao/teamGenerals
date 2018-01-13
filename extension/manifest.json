@@ -19,7 +19,7 @@
       "js": ["index.js"]
     }
   ],
-  "web_accessible_resources": ["bundle.js"],
+  "web_accessible_resources": ["bundle.js", "index.css"],
   "manifest_version": 2
 }
 
