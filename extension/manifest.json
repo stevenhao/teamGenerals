@@ -1,0 +1,25 @@
+{
+  "name": "Team Generals",
+  "description": "Play team generals",
+  "version": "0.0.1",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "https://*.firebaseio.com/*"
+  ],
+  "browser_action": {
+    "default_title": "Team Generals"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://generals.io/*",
+        "https://generals.io/*"
+      ],
+      "js": ["index.js"]
+    }
+  ],
+  "web_accessible_resources": ["bundle.js"],
+  "manifest_version": 2
+}
+
